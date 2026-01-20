@@ -13,6 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.mapbox.geojson.Feature
+import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.mapbox.geojson.Geometry
@@ -42,6 +43,8 @@ import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.GeoJsonOptions
+import org.maplibre.android.style.sources.Source
 import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -241,9 +244,13 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListene
     }
 
     private fun addRouteSource(style: Style) {
-        val routeFeature = createRouteFeature(routeCoordinates)
-        val routeSource = GeoJsonSource(ROUTE_SOURCE_ID, routeFeature)
+        val routeSource = GeoJsonSource(ROUTE_SOURCE_ID, GeoJsonOptions())
         style.addSource(routeSource)
+
+        if (routeCoordinates.isNotEmpty()) {
+            val routeFeatureCollection = createRouteFeatureCollection(routeCoordinates)
+            routeSource.setGeoJson(routeFeatureCollection.toJson())
+        }
     }
 
     private fun addRouteLayer(style: Style) {
@@ -370,15 +377,19 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListene
     }
 
     private fun updateRouteOnMap(lineString: LineString) {
-        val source = maplibreMap.style?.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
-        source?.setGeoJson( lineString.toJson() )
+        val source: Source? = maplibreMap.style?.getSource(ROUTE_SOURCE_ID)
+        if (source is GeoJsonSource) {
+            source.setGeoJson(Feature.fromGeometry(lineString).toJson())
+        }
     }
 
     private fun clearRoute() {
         val style = maplibreMap.style
         style?.let {
-            val source = it.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
-            source?.setGeoJson(LineString.fromLngLats(emptyList<Point>()).toJson())
+            val source = it.getSource(ROUTE_SOURCE_ID)
+            if (source is GeoJsonSource) {
+                source.setGeoJson(FeatureCollection.fromFeatures(emptyList<Feature>()).toJson())
+            }
         }
 
         markers.forEach { maplibreMap.removeMarker(it) }
@@ -449,10 +460,14 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListene
         """.trimIndent()
     }
 
-    private fun createRouteFeature(coordinates: List<LatLng>): String {
+    private fun createRouteFeatureCollection(coordinates: List<LatLng>): FeatureCollection {
+        if (coordinates.isEmpty()) {
+            return FeatureCollection.fromFeatures(emptyList<Feature>())
+        }
         val points = coordinates.map { Point.fromLngLat(it.longitude, it.latitude) }
         val lineString = LineString.fromLngLats(points)
-        return lineString.toJson()
+        val feature = Feature.fromGeometry(lineString)
+        return FeatureCollection.fromFeature(feature)
     }
 
     private fun createPointFeature(latLng: LatLng, type: String, title: String): String {
