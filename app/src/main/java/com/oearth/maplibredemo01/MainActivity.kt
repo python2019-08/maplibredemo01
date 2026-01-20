@@ -394,6 +394,8 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListene
 
         markers.forEach { maplibreMap.removeMarker(it) }
         markers.clear()
+
+        binding.tvRouteInfo.text = "目的地 设置"
     }
 
 
