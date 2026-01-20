@@ -11,11 +11,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.karumi.dexter.Dexter
-import com.karumi.dexter.MultiplePermissionsReport
-import com.karumi.dexter.PermissionToken
-import com.karumi.dexter.listener.PermissionRequest
-import com.karumi.dexter.listener.multi.MultiplePermissionsListener
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
 import com.oearth.maplibredemo01.databinding.ActivityMainBinding
@@ -31,10 +26,14 @@ import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.LocationComponentOptions
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
+import org.maplibre.android.location.permissions.PermissionsListener
+import org.maplibre.android.location.permissions.PermissionsManager
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.OnMapReadyCallback
 import org.maplibre.android.maps.Style
+//import org.maplibre.android.permissions.PermissionsListener
+//import org.maplibre.android.permissions.PermissionsManager
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -46,13 +45,14 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-class MainActivity : AppCompatActivity(), OnMapReadyCallback {
+class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListener {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var mapView: MapView
     private lateinit var maplibreMap: MapLibreMap
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val markers = mutableListOf<Marker>()
+    private var permissionsManager: PermissionsManager? = null
  
 
     companion object {
@@ -112,15 +112,20 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
         this.maplibreMap = map
 
         map.setStyle(Style.Builder().fromUri("https://americanamap.org/style.json")) { style ->
-            checkLocationPermission()
             addRouteSource(style)
             addRouteLayer(style)
             addMarkersToMap()
             addUserLocationSource(style)
             addUserLocationLayer(style)
-            enableLocationComponent(style)
-
             zoomToRoute(map, routeCoordinates)
+
+            if (PermissionsManager.areLocationPermissionsGranted(this)) {
+                enableLocationComponent(style)
+                enableUserLocation()
+            } else {
+                permissionsManager = PermissionsManager(this)
+                permissionsManager?.requestLocationPermissions(this)
+            }
         }
 
         map.addOnMapClickListener { point ->
@@ -134,34 +139,24 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback {
     }
 
 
-    private fun checkLocationPermission() {
-        Dexter.withContext(this)
-            .withPermissions(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-            .withListener(object : MultiplePermissionsListener {
-                override fun onPermissionsChecked(report: MultiplePermissionsReport?) {
-                    report?.let {
-                        if (report.areAllPermissionsGranted()) {
-                            enableUserLocation()
-                        } else {
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Location permission is needed to show your location",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                }
+    override fun onExplanationNeeded(permissionsToExplain: MutableList<String>) {
+        Toast.makeText(this, "This app needs location permissions to show your location.", Toast.LENGTH_LONG).show()
+    }
 
-                override fun onPermissionRationaleShouldBeShown(
-                    permissions: MutableList<PermissionRequest>?,
-                    token: PermissionToken?
-                ) {
-                    token?.continuePermissionRequest()
-                }
-            }).check()
+    override fun onPermissionResult(granted: Boolean) {
+        if (granted) {
+            maplibreMap.getStyle { style ->
+                enableLocationComponent(style)
+                enableUserLocation()
+            }
+        } else {
+            Toast.makeText(this, "Location permissions not granted.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        permissionsManager?.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     @SuppressLint("MissingPermission")
