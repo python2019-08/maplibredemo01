@@ -33,15 +33,6 @@
             android:padding="12dp">
 
             <TextView
-                android:id="@+id/tvDistance"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="距离目的地: -- 公里"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="@android:color/black" />
-
-            <TextView
                 android:id="@+id/tvRouteInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -54,39 +45,28 @@
 
     <!-- 底部控制按钮 -->
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:background="#80000000"
         android:orientation="horizontal"
-        android:gravity="center"
+        android:padding="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/btnLocateMe"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:src="@android:drawable/ic_menu_mylocation"
-            app:backgroundTint="@android:color/white"
-            app:tint="@android:color/black" />
-
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <Button
             android:id="@+id/btnStartNavigation"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:src="@android:drawable/ic_menu_directions"
-            app:backgroundTint="@color/purple_500"
-            app:tint="@android:color/white" />
+            android:layout_weight="1"
+            android:text="Start Navigation" />
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <Button
             android:id="@+id/btnClearRoute"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            app:backgroundTint="@android:color/white"
-            app:tint="@android:color/black" />
+            android:layout_weight="1"
+            android:text="Clear Route" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -9,12 +9,15 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.mapbox.geojson.Feature
 import com.mapbox.geojson.LineString
 import com.mapbox.geojson.Point
-import com.oearth.maplibredemo01.databinding.ActivityMainBinding
+import com.mapbox.geojson.Geometry
 import org.maplibre.android.MapLibre
+import com.oearth.maplibredemo01.databinding.ActivityMainBinding
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
@@ -32,14 +35,20 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.OnMapReadyCallback
 import org.maplibre.android.maps.Style
-//import org.maplibre.android.permissions.PermissionsListener
-//import org.maplibre.android.permissions.PermissionsManager
+
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.lang.Exception
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -103,9 +112,6 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListene
             clearRoute()
         }
 
-        binding.btnLocateMe.setOnClickListener {
-            // centerOnUserLocation()
-        }
     }
 
     override fun onMapReady(map: MapLibreMap) {
@@ -299,37 +305,84 @@ class MainActivity : AppCompatActivity(), OnMapReadyCallback, PermissionsListene
         style?.let {
             val source = it.getSourceAs<GeoJsonSource>(USER_LOCATION_SOURCE_ID)
             source?.setGeoJson(createUserLocationFeature(latLng))
+
+        
             val distance = calculateDistance(latLng, destination)
-            binding.tvDistance.text = String.format("Distance to destination: %.2f km", distance)
+             
+            if (this::maplibreMap.isInitialized) {
+                // binding.tvDistance.text = String.format("Distance to destination: %.2f km", distance)
+            }
         }
     }
 
     private fun startNavigation() {
-        Toast.makeText(this, "Starting navigation", Toast.LENGTH_SHORT).show()
-        val bounds = org.maplibre.android.geometry.LatLngBounds.Builder()
-            .includes(routeCoordinates)
-            .build()
+        if (routeCoordinates.isEmpty()) {
+            Toast.makeText(this, "Route coordinates are not set.", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        maplibreMap.animateCamera(
-            CameraUpdateFactory.newLatLngBounds(bounds, 100),
-            1000
-        )
+        if (markers.isEmpty()) {
+            addMarkersToMap()
+        }
 
-        val totalDistance = calculateRouteDistance(routeCoordinates)
-        binding.tvRouteInfo.text = String.format("Total route distance: %.2f km", totalDistance)
+        val startPoint = routeCoordinates.first()
+        val endPoint = destination
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val client = OkHttpClient()
+            val url = "https://router.project-osrm.org/route/v1/driving/${startPoint.longitude},${startPoint.latitude};${endPoint.longitude},${endPoint.latitude}?overview=full&geometries=geojson"
+            val request = Request.Builder().url(url).build()
+
+            try {
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string()
+                    if (responseBody != null) {
+                        val jsonObject = JSONObject(responseBody)
+                        val routes = jsonObject.getJSONArray("routes")
+                        if (routes.length() > 0) {
+                            val route = routes.getJSONObject(0)
+                            val geometry = route.getJSONObject("geometry")
+                            val lineString = LineString.fromJson(geometry.toString())
+                            
+                            val newCoordinates = lineString.coordinates().map { point ->
+                                LatLng(point.latitude(), point.longitude())
+                            }
+
+                            withContext(Dispatchers.Main) {
+                                updateRouteOnMap(lineString)
+                                zoomToRoute(maplibreMap, newCoordinates)
+                            }
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "Error fetching route", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Failed to connect to routing service", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun updateRouteOnMap(lineString: LineString) {
+        val source = maplibreMap.style?.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
+        source?.setGeoJson( lineString.toJson() )
     }
 
     private fun clearRoute() {
         val style = maplibreMap.style
         style?.let {
-            it.removeLayer(ROUTE_LAYER_ID)
-            it.removeSource(ROUTE_SOURCE_ID)
+            val source = it.getSourceAs<GeoJsonSource>(ROUTE_SOURCE_ID)
+            source?.setGeoJson(LineString.fromLngLats(emptyList<Point>()).toJson())
         }
 
         markers.forEach { maplibreMap.removeMarker(it) }
         markers.clear()
-
-        binding.tvRouteInfo.text = "Route cleared"
     }
 
 
